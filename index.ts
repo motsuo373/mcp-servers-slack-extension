@@ -50,6 +50,11 @@ interface GetUserProfileArgs {
   user_id: string;
 }
 
+interface SearchMessagesArgs {
+  query: string;
+  channel_id: string;
+}
+
 // Tool definitions
 const listChannelsTool: Tool = {
   name: "slack_list_channels",
@@ -210,6 +215,25 @@ const getUserProfileTool: Tool = {
   },
 };
 
+const searchMessagesTool: Tool = {
+  name: "slack_search_messages",
+  description: "Search for messages in the workspace",
+  inputSchema: {
+    type: "object",
+    properties: {
+      query: {
+        type: "string",
+        description: "The search query",
+      },
+      channel_id: {
+        type: "string",
+        description: "The ID of the channel to search in",
+      },
+    },
+    required: ["query", "channel_id"],
+  },
+};
+
 class SlackClient {
   private botHeaders: { Authorization: string; "Content-Type": string };
 
@@ -345,6 +369,20 @@ class SlackClient {
 
     const response = await fetch(
       `https://slack.com/api/users.profile.get?${params}`,
+      { headers: this.botHeaders },
+    );
+
+    return response.json();
+  }
+
+  async searchMessages(query: string, channel_id: string): Promise<any> {
+    const params = new URLSearchParams({
+      query: query,
+      channel: channel_id,
+    });
+
+    const response = await fetch(
+      `https://slack.com/api/search.messages?${params}`,
       { headers: this.botHeaders },
     );
 
@@ -506,6 +544,20 @@ async function main() {
             };
           }
 
+          case "slack_search_messages": {
+            const args = request.params.arguments as unknown as SearchMessagesArgs;
+            if (!args.query || !args.channel_id) {
+              throw new Error("Missing required arguments: query and channel_id");
+            }
+            const response = await slackClient.searchMessages(
+              args.query,
+              args.channel_id,
+            );
+            return {
+              content: [{ type: "text", text: JSON.stringify(response) }],
+            };
+          }
+
           default:
             throw new Error(`Unknown tool: ${request.params.name}`);
         }
@@ -537,6 +589,7 @@ async function main() {
         getThreadRepliesTool,
         getUsersTool,
         getUserProfileTool,
+        searchMessagesTool,
       ],
     };
   });
