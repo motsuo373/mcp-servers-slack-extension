@@ -46,6 +46,11 @@ interface GetUsersArgs {
   limit?: number;
 }
 
+interface SearchMessagesArgs {
+  query: string;
+  count?: number;
+}
+
 interface GetUserProfileArgs {
   user_id: string;
 }
@@ -102,7 +107,8 @@ const replyToThreadTool: Tool = {
       },
       thread_ts: {
         type: "string",
-        description: "The timestamp of the parent message in the format '1234567890.123456'. Timestamps in the format without the period can be converted by adding the period such that 6 numbers come after it.",
+        description:
+          "The timestamp of the parent message in the format '1234567890.123456'. Timestamps in the format without the period can be converted by adding the period such that 6 numbers come after it.",
       },
       text: {
         type: "string",
@@ -168,10 +174,31 @@ const getThreadRepliesTool: Tool = {
       },
       thread_ts: {
         type: "string",
-        description: "The timestamp of the parent message in the format '1234567890.123456'. Timestamps in the format without the period can be converted by adding the period such that 6 numbers come after it.",
+        description:
+          "The timestamp of the parent message in the format '1234567890.123456'. Timestamps in the format without the period can be converted by adding the period such that 6 numbers come after it.",
       },
     },
     required: ["channel_id", "thread_ts"],
+  },
+};
+
+const searchMessagesTool: Tool = {
+  name: "slack_search_messages",
+  description: "Search for messages across channels",
+  inputSchema: {
+    type: "object",
+    properties: {
+      query: {
+        type: "string",
+        description: "The search query",
+      },
+      count: {
+        type: "number",
+        description: "Number of results to return (default 5)",
+        default: 5,
+      },
+    },
+    required: ["query"],
   },
 };
 
@@ -212,10 +239,15 @@ const getUserProfileTool: Tool = {
 
 class SlackClient {
   private botHeaders: { Authorization: string; "Content-Type": string };
+  private userHeaders: { Authorization: string; "Content-Type": string };
 
-  constructor(botToken: string) {
+  constructor(botToken: string, userToken: string) {
     this.botHeaders = {
       Authorization: `Bearer ${botToken}`,
+      "Content-Type": "application/json",
+    };
+    this.userHeaders = {
+      Authorization: `Bearer ${userToken}`,
       "Content-Type": "application/json",
     };
   }
@@ -234,7 +266,7 @@ class SlackClient {
 
     const response = await fetch(
       `https://slack.com/api/conversations.list?${params}`,
-      { headers: this.botHeaders },
+      { headers: this.botHeaders }
     );
 
     return response.json();
@@ -256,7 +288,7 @@ class SlackClient {
   async postReply(
     channel_id: string,
     thread_ts: string,
-    text: string,
+    text: string
   ): Promise<any> {
     const response = await fetch("https://slack.com/api/chat.postMessage", {
       method: "POST",
@@ -274,7 +306,7 @@ class SlackClient {
   async addReaction(
     channel_id: string,
     timestamp: string,
-    reaction: string,
+    reaction: string
   ): Promise<any> {
     const response = await fetch("https://slack.com/api/reactions.add", {
       method: "POST",
@@ -291,7 +323,7 @@ class SlackClient {
 
   async getChannelHistory(
     channel_id: string,
-    limit: number = 10,
+    limit: number = 10
   ): Promise<any> {
     const params = new URLSearchParams({
       channel: channel_id,
@@ -300,7 +332,7 @@ class SlackClient {
 
     const response = await fetch(
       `https://slack.com/api/conversations.history?${params}`,
-      { headers: this.botHeaders },
+      { headers: this.botHeaders }
     );
 
     return response.json();
@@ -314,7 +346,21 @@ class SlackClient {
 
     const response = await fetch(
       `https://slack.com/api/conversations.replies?${params}`,
-      { headers: this.botHeaders },
+      { headers: this.botHeaders }
+    );
+
+    return response.json();
+  }
+
+  async searchMessages(query: string, count: number = 5): Promise<any> {
+    const params = new URLSearchParams({
+      query: query,
+      count: count.toString(),
+    });
+
+    const response = await fetch(
+      `https://slack.com/api/search.messages?${params}`,
+      { headers: this.userHeaders }
     );
 
     return response.json();
@@ -345,7 +391,7 @@ class SlackClient {
 
     const response = await fetch(
       `https://slack.com/api/users.profile.get?${params}`,
-      { headers: this.botHeaders },
+      { headers: this.botHeaders }
     );
 
     return response.json();
@@ -354,11 +400,12 @@ class SlackClient {
 
 async function main() {
   const botToken = process.env.SLACK_BOT_TOKEN;
+  const userToken = process.env.SLACK_USER_TOKEN;
   const teamId = process.env.SLACK_TEAM_ID;
 
-  if (!botToken || !teamId) {
+  if (!botToken || !teamId || !userToken) {
     console.error(
-      "Please set SLACK_BOT_TOKEN and SLACK_TEAM_ID environment variables",
+      "Please set SLACK_BOT_TOKEN, SLACK_TEAM_ID, and SLACK_USER_TOKEN environment variables"
     );
     process.exit(1);
   }
@@ -373,10 +420,10 @@ async function main() {
       capabilities: {
         tools: {},
       },
-    },
+    }
   );
 
-  const slackClient = new SlackClient(botToken);
+  const slackClient = new SlackClient(botToken, userToken);
 
   server.setRequestHandler(
     CallToolRequestSchema,
@@ -393,7 +440,7 @@ async function main() {
               .arguments as unknown as ListChannelsArgs;
             const response = await slackClient.getChannels(
               args.limit,
-              args.cursor,
+              args.cursor
             );
             return {
               content: [{ type: "text", text: JSON.stringify(response) }],
@@ -404,12 +451,12 @@ async function main() {
             const args = request.params.arguments as unknown as PostMessageArgs;
             if (!args.channel_id || !args.text) {
               throw new Error(
-                "Missing required arguments: channel_id and text",
+                "Missing required arguments: channel_id and text"
               );
             }
             const response = await slackClient.postMessage(
               args.channel_id,
-              args.text,
+              args.text
             );
             return {
               content: [{ type: "text", text: JSON.stringify(response) }],
@@ -421,13 +468,13 @@ async function main() {
               .arguments as unknown as ReplyToThreadArgs;
             if (!args.channel_id || !args.thread_ts || !args.text) {
               throw new Error(
-                "Missing required arguments: channel_id, thread_ts, and text",
+                "Missing required arguments: channel_id, thread_ts, and text"
               );
             }
             const response = await slackClient.postReply(
               args.channel_id,
               args.thread_ts,
-              args.text,
+              args.text
             );
             return {
               content: [{ type: "text", text: JSON.stringify(response) }],
@@ -438,13 +485,13 @@ async function main() {
             const args = request.params.arguments as unknown as AddReactionArgs;
             if (!args.channel_id || !args.timestamp || !args.reaction) {
               throw new Error(
-                "Missing required arguments: channel_id, timestamp, and reaction",
+                "Missing required arguments: channel_id, timestamp, and reaction"
               );
             }
             const response = await slackClient.addReaction(
               args.channel_id,
               args.timestamp,
-              args.reaction,
+              args.reaction
             );
             return {
               content: [{ type: "text", text: JSON.stringify(response) }],
@@ -459,7 +506,7 @@ async function main() {
             }
             const response = await slackClient.getChannelHistory(
               args.channel_id,
-              args.limit,
+              args.limit
             );
             return {
               content: [{ type: "text", text: JSON.stringify(response) }],
@@ -471,12 +518,27 @@ async function main() {
               .arguments as unknown as GetThreadRepliesArgs;
             if (!args.channel_id || !args.thread_ts) {
               throw new Error(
-                "Missing required arguments: channel_id and thread_ts",
+                "Missing required arguments: channel_id and thread_ts"
               );
             }
             const response = await slackClient.getThreadReplies(
               args.channel_id,
-              args.thread_ts,
+              args.thread_ts
+            );
+            return {
+              content: [{ type: "text", text: JSON.stringify(response) }],
+            };
+          }
+
+          case "slack_search_messages": {
+            const args = request.params
+              .arguments as unknown as SearchMessagesArgs;
+            if (!args.query) {
+              throw new Error("Missing required argument: query");
+            }
+            const response = await slackClient.searchMessages(
+              args.query,
+              args.count
             );
             return {
               content: [{ type: "text", text: JSON.stringify(response) }],
@@ -487,7 +549,7 @@ async function main() {
             const args = request.params.arguments as unknown as GetUsersArgs;
             const response = await slackClient.getUsers(
               args.limit,
-              args.cursor,
+              args.cursor
             );
             return {
               content: [{ type: "text", text: JSON.stringify(response) }],
@@ -522,7 +584,7 @@ async function main() {
           ],
         };
       }
-    },
+    }
   );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -537,6 +599,7 @@ async function main() {
         getThreadRepliesTool,
         getUsersTool,
         getUserProfileTool,
+        searchMessagesTool,
       ],
     };
   });
