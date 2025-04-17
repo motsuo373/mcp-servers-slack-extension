@@ -4,15 +4,22 @@ This is an extension of the [Slack MCP Server](https://github.com/modelcontextpr
 
 ## Additional Tools
 
-1. `my_custom_tool_name`
-   * Description of what the tool does
-   * Required inputs:
-        * `input_name` (type): Description of input
-   * Optional inputs:
-        * `optional_input` (type, default: value): Description of optional input
-   * Returns: Description of what the tool returns
+### slack_search_messages
+
+- Searches for messages across channels with optional DM exclusion
+- Required inputs:
+  - `query` (string): The search query
+- Optional inputs:
+  - `count` (number, default: 5): Number of results to return
+- Configuration options:
+  - `excludeDMsFromSearch` (boolean, default: false): When true, excludes DM results from search by adding `-in:@` to the query
+- Returns: JSON response containing search results
+
+For all other available tools and functionality, please refer to the [original Slack MCP Server documentation](https://github.com/modelcontextprotocol/servers/tree/main/src/slack).
 
 ## Setup
+
+Please refer to the [original Slack MCP Server documentation](https://github.com/modelcontextprotocol/servers/tree/main/src/slack) for setup instructions.
 
 ## Development
 

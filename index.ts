@@ -240,8 +240,13 @@ const getUserProfileTool: Tool = {
 class SlackClient {
   private botHeaders: { Authorization: string; "Content-Type": string };
   private userHeaders: { Authorization: string; "Content-Type": string };
+  private excludeDMsFromSearch: boolean;
 
-  constructor(botToken: string, userToken: string) {
+  constructor(
+    botToken: string,
+    userToken: string,
+    options: { excludeDMsFromSearch?: boolean } = {}
+  ) {
     this.botHeaders = {
       Authorization: `Bearer ${botToken}`,
       "Content-Type": "application/json",
@@ -250,6 +255,7 @@ class SlackClient {
       Authorization: `Bearer ${userToken}`,
       "Content-Type": "application/json",
     };
+    this.excludeDMsFromSearch = options.excludeDMsFromSearch ?? true;
   }
 
   async getChannels(limit: number = 100, cursor?: string): Promise<any> {
@@ -353,8 +359,9 @@ class SlackClient {
   }
 
   async searchMessages(query: string, count: number = 5): Promise<any> {
+    const searchQuery = this.excludeDMsFromSearch ? `${query} -in:@` : query;
     const params = new URLSearchParams({
-      query: query,
+      query: searchQuery,
       count: count.toString(),
     });
 
@@ -423,7 +430,9 @@ async function main() {
     }
   );
 
-  const slackClient = new SlackClient(botToken, userToken);
+  const slackClient = new SlackClient(botToken, userToken, {
+    excludeDMsFromSearch: true,
+  });
 
   server.setRequestHandler(
     CallToolRequestSchema,
